@@ -33,7 +33,7 @@ export default function GOSDashboard() {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const [currentUserProfile, setCurrentUserProfile] = useState<{ nome?: string; cognome?: string; email?: string; ruolo?: string } | null>(null);
-  const [userRole, setUserRole] = useState<string>('user');
+  const [userRole, setUserRole] = useState<string>('admin');
   const [sessionStartTime, setSessionStartTime] = useState<number>(0);
   const [elapsedTime, setElapsedTime] = useState<string>('00:00:00');
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
@@ -73,8 +73,6 @@ export default function GOSDashboard() {
 
   const [aziende, setAziende] = useState<any[]>([]);
   const [masterForms, setMasterForms] = useState<any[]>([]);
-  const [masterDomande, setMasterDomande] = useState<any[]>([]);
-  const [glaringUsers, setGlaringUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAzienda, setSelectedAzienda] = useState<any | null>(null);
   const [forms, setForms] = useState<any[]>([]);
@@ -87,9 +85,7 @@ export default function GOSDashboard() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
-      if (session) {
-        setSessionStartTime(Date.now());
-      }
+      if (session) setSessionStartTime(Date.now());
     });
   }, []);
 
@@ -128,6 +124,16 @@ export default function GOSDashboard() {
   const loadAziendaDetails = async (azienda: any) => {
     setSelectedAzienda(azienda);
     setActiveTab('executive');
+    if (azienda.business_plan_data?.inputs) {
+      const inp = azienda.business_plan_data.inputs;
+      if (inp.prodotti) setProdotti(inp.prodotti);
+      if (inp.costiProduzioneExtra) setCostiProduzioneExtra(inp.costiProduzioneExtra);
+      if (inp.personale) setPersonale(inp.personale);
+      if (inp.altriCosti) setAltriCosti(inp.altriCosti);
+      if (inp.capex) setCapex(inp.capex);
+      if (inp.finanziamenti) setFinanziamenti(inp.finanziamenti);
+      if (inp.beginningBalance) setBeginningBalance(inp.beginningBalance);
+    }
     try {
       const { data: formData } = await supabase.from('gos_forms').select('*').eq('azienda_id', azienda.id);
       setForms(formData || []);
@@ -170,7 +176,7 @@ export default function GOSDashboard() {
           {loginError && <p className="text-red-600 text-xs">{loginError}</p>}
           <input type="email" required placeholder="Email" value={emailLogin} onChange={e => setEmailLogin(e.target.value)} className="w-full px-3 py-2 border border-slate-300 text-xs" />
           <input type="password" required placeholder="Password" value={passwordLogin} onChange={e => setPasswordLogin(e.target.value)} className="w-full px-3 py-2 border border-slate-300 text-xs" />
-          <button type="submit" className="w-full py-2.5 bg-slate-950 text-[#ccff00] text-xs font-bold uppercase">Accedi</button>
+          <button type="submit" className="w-full py-2.5 bg-slate-950 text-[#ccff00] text-xs font-bold uppercase cursor-pointer">Accedi</button>
         </form>
       </div>
     );
