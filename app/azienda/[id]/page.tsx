@@ -1,289 +1,195 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Building2, ShieldCheck, FileText } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { 
+  Building2, Users, ShieldCheck, Database, ArrowRight, Plus, ArrowLeft, 
+  FileText, HelpCircle, Trash2, Edit2, Check, X, Library, Download, 
+  BarChart3, Globe, LogOut, Clock, Calendar, PieChart, 
+  TrendingUp, Award, Layers, AlertCircle, DollarSign, Percent, Briefcase, 
+  ArrowUp, ArrowDown, Lock, Mail, Eye, Copy, Send, ChevronDown, ChevronRight,
+  TrendingDown, CheckCircle2, UserCheck, RefreshCw, Save, LayoutDashboard
+} from 'lucide-react';
 
-export default function SchedaAnagraficaAziendaPage() {
-  const params = useParams();
+import ExecutiveTab from '@/components/tabs/ExecutiveTab';
+import QuestionariTab from '@/components/tabs/QuestionariTab';
+import BusinessPlanTab from '@/components/tabs/BusinessPlanTab';
+import CronoprogrammaTab from '@/components/tabs/CronoprogrammaTab';
+import RuoliGovernanceTab from '@/components/tabs/RuoliGovernanceTab';
+import { useFinancialEngine } from '@/components/FinancialEngine';
+import { generateClientReport } from '@/lib/pdfGenerator';
+
+export default function AziendaCruscottoPage() {
   const router = useRouter();
-  const aziendaId = params?.id as string;
+  const pathname = usePathname();
 
+  const [aziendaId, setAziendaId] = useState<string | null>(null);
+  const [selectedAzienda, setSelectedAzienda] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [azienda, setAzienda] = useState<any>(null);
-  const [m01Form, setM01Form] = useState<any>(null);
+  const [userRole, setUserRole] = useState('admin');
+
+  const [activeTab, setActiveTab] = useState<'executive' | 'questionari' | 'business_plan' | 'cronoprogramma' | 'ruoli'>('executive');
+  const [bpSubTab, setBpSubTab] = useState<'input' | 'ce' | 'sp' | 'cashflow' | 'debito' | 'indexes'>('input');
+
+  const [beginningBalance, setBeginningBalance] = useState({ y1: 0, y2: 0, y3: 0, y4: 0, y5: 0 });
+  const [prodotti, setProdotti] = useState([
+    { id: 1, nome: 'Prodotto 1', q: { y1: 1000, y2: 1200, y3: 1500, y4: 1800, y5: 2000 }, prezzo: { y1: 100, y2: 100, y3: 110, y4: 110, y5: 120 }, costo: { y1: 40, y2: 40, y3: 45, y4: 45, y5: 50 } }
+  ]);
+  const [costiProduzioneExtra, setCostiProduzioneExtra] = useState([{ id: 1, voce: 'Costi generali', y1: 10000, y2: 11000, y3: 12000, y4: 13000, y5: 14000 }]);
+  const [personale, setPersonale] = useState([{ id: 1, voce: 'Team operativo', y1: 50000, y2: 55000, y3: 60000, y4: 65000, y5: 70000 }]);
+  const [altriCosti, setAltriCosti] = useState([{ id: 1, voce: 'OPEX', y1: 15000, y2: 16000, y3: 17000, y4: 18000, y5: 19000 }]);
+  const [capex, setCapex] = useState([{ id: 1, voce: 'Investimenti impianti', y1: 40000, y2: 10000, y3: 5000, y4: 5000, y5: 5000 }]);
+  const [finanziamenti, setFinanziamenti] = useState([{ id: 1, banca: 'Banca Partner', importo: 50000, tasso: 0.05, durata: 5 }]);
+
+  const [aliquotaFiscale, setAliquotaFiscale] = useState<number>(0.24);
+  const [wacc, setWacc] = useState<number>(0.09);
+
+  const financialReports = useFinancialEngine(
+    prodotti, costiProduzioneExtra, personale, altriCosti, capex, finanziamenti, beginningBalance, aliquotaFiscale, wacc
+  );
+
+  const [teamMembers, setTeamMembers] = useState([
+    { id: 1, ruolo: 'Senior Executive Partner', nome: 'Corrado', cognome: 'Pinna', email: 'support@glaring.world', paese: 'Italia', societa: 'Glaring LLP' },
+    { id: 2, ruolo: 'Operations & Financial Lead', nome: 'Advisor', cognome: 'Glaring', email: 'advisor@glaring.world', paese: 'Regno Unito', societa: 'Glaring LLP' }
+  ]);
+
+  const [roadmapTasks, setRoadmapTasks] = useState([
+    { 
+      id: 1, fase: 'Fase 1', codice: '1.1', task: 'Audit dei processi e analisi dati iniziali', owner: 'Team GOS', 
+      inizio: '2026-03-01', fine: '2026-03-10', giorni: 10, budget: 5000, reale: 4800, stato: 'Completato', subtasks: [] 
+    }
+  ]);
+
+  const [forms, setForms] = useState<any[]>([]);
   const [domande, setDomande] = useState<any[]>([]);
-  const [risposte, setRisposte] = useState<{ [key: string]: string }>({});
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [risposteClienti, setRisposteClienti] = useState<any[]>([]);
+  const [openFormsState, setOpenFormsState] = useState<{ [key: string]: boolean }>({});
+  const [savingFinancials, setSavingFinancials] = useState(false);
 
   useEffect(() => {
-    if (aziendaId) {
-      fetchAnagraficaData(aziendaId);
+    if (pathname) {
+      const parts = pathname.split('/');
+      const id = parts[parts.length - 1];
+      if (id && id !== 'azienda') {
+        setAziendaId(id);
+        fetchAziendaDati(id);
+      }
     }
-  }, [aziendaId]);
+  }, [pathname]);
 
-  const fetchAnagraficaData = async (id: string) => {
+  const fetchAziendaDati = async (id: string) => {
     try {
       setLoading(true);
-
-      // 1. Carica Anagrafica Base Azienda
-      const { data: azData, error: azErr } = await supabase
-        .from('gos_aziende')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const { data: azData, error: azErr } = await supabase.from('gos_aziende').select('*').eq('id', id).single();
       if (azErr) throw azErr;
-      setAzienda(azData);
+      setSelectedAzienda(azData);
 
-      // 2. Carica il Modulo M01 specifico per questa Azienda
-      const { data: formData } = await supabase
-        .from('gos_forms')
-        .select('*')
-        .eq('azienda_id', id)
-        .ilike('titolo', '%Anagrafica%')
-        .maybeSingle();
-
-      if (formData) {
-        setM01Form(formData);
-
-        // 3. Carica Domande collegate al modulo M01
-        const { data: domData, error: domErr } = await supabase
-          .from('gos_domande')
-          .select('*')
-          .eq('form_id', formData.id)
-          .order('ordine', { ascending: true });
-
-        if (!domErr && domData) {
-          setDomande(domData);
-        }
+      if (azData?.business_plan_data?.inputs) {
+        const inp = azData.business_plan_data.inputs;
+        if (inp.prodotti) setProdotti(inp.prodotti);
+        if (inp.costiProduzioneExtra) setCostiProduzioneExtra(inp.costiProduzioneExtra);
+        if (inp.personale) setPersonale(inp.personale);
+        if (inp.altriCosti) setAltriCosti(inp.altriCosti);
+        if (inp.capex) setCapex(inp.capex);
+        if (inp.finanziamenti) setFinanziamenti(inp.finanziamenti);
+        if (inp.beginningBalance) setBeginningBalance(inp.beginningBalance);
       }
 
-      // 4. Carica Risposte già registrate per l'Azienda
-      const { data: respData } = await supabase
-        .from('gos_risposte_clienti')
-        .select('*')
-        .eq('azienda_id', id);
-
-      if (respData && respData.length > 0) {
-        const respMap: { [key: string]: string } = {};
-        respData.forEach((r: any) => {
-          respMap[r.domanda_id] = r.valore_risposta;
-        });
-        setRisposte(respMap);
+      const { data: formData } = await supabase.from('gos_forms').select('*').eq('azienda_id', id);
+      setForms(formData || []);
+      if (formData && formData.length > 0) {
+        const formIds = formData.map(f => f.id);
+        const { data: domData } = await supabase.from('gos_domande').select('*').in('form_id', formIds);
+        setDomande(domData || []);
       }
+      const { data: respData } = await supabase.from('gos_risposte_clienti').select('*').eq('azienda_id', id);
+      setRisposteClienti(respData || []);
     } catch (err: any) {
-      console.error('Errore caricamento anagrafica:', err.message);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveAnagrafica = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aziendaId) return;
-
+  const handleSaveFinancialsToSupabase = async () => {
+    if (!selectedAzienda) return;
     try {
-      setSaving(true);
-      setSaveSuccess(false);
-
-      // 1. Aggiorna Dati Primari Tabella Azienda
-      const { error: azUpdErr } = await supabase
-        .from('gos_aziende')
-        .update({
-          ragione_sociale: azienda.ragione_sociale,
-          settore: azienda.settore,
-          paese: azienda.paese,
-        })
-        .eq('id', aziendaId);
-
-      if (azUpdErr) throw azUpdErr;
-
-      // 2. Upsert Risposte per i Campi M01
-      const payload = Object.keys(risposte)
-        .filter((domId) => risposte[domId] !== undefined)
-        .map((domId) => ({
-          azienda_id: aziendaId,
-          domanda_id: domId,
-          valore_risposta: risposte[domId].trim(),
-          updated_at: new Date().toISOString(),
-        }));
-
-      if (payload.length > 0) {
-        const { error: respErr } = await supabase
-          .from('gos_risposte_clienti')
-          .upsert(payload, { onConflict: 'azienda_id,domanda_id' });
-
-        if (respErr) throw respErr;
-      }
-
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setSavingFinancials(true);
+      const { error } = await supabase.from('gos_aziende').update({
+        business_plan_data: { financialReports, inputs: { prodotti, costiProduzioneExtra, personale, altriCosti, capex, finanziamenti, beginningBalance } },
+        updated_at: new Date().toISOString()
+      }).eq('id', selectedAzienda.id);
+      if (error) throw error;
+      alert('Salvato con successo su Supabase!');
     } catch (err: any) {
-      alert('Errore durante il salvataggio: ' + err.message);
+      alert('Errore: ' + err.message);
     } finally {
-      setSaving(false);
+      setSavingFinancials(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center font-sans">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-600">Caricamento Anagrafica M01...</p>
-      </div>
-    );
-  }
-
-  if (!azienda) {
-    return (
-      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center font-sans">
-        <div className="bg-white border border-slate-300 p-8 max-w-md text-center">
-          <h2 className="text-lg font-bold text-red-600">Azienda Non Trovata</h2>
-          <button 
-            onClick={() => router.push('/')} 
-            className="mt-4 px-4 py-2 bg-slate-950 text-white text-xs font-bold uppercase"
-          >
-            Torna alla Dashboard
-          </button>
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center text-xs font-bold">Caricamento cruscotto azienda...</div>;
   }
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-slate-900 font-sans flex flex-col justify-between">
-      {/* Header Advisor GOS */}
       <header className="bg-slate-950 text-white border-b border-slate-800 px-8 py-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/')}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              title="Torna alla Dashboard"
-            >
+            <button onClick={() => router.push('/')} className="p-2 bg-slate-900 text-white border border-slate-700 cursor-pointer">
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-bold uppercase tracking-widest text-[#ccff00]">GOS 1.0 — Controllo Anagrafica M01 (Advisor)</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-[#ccff00]">GOS 1.0 — Cruscotto Azienda: {selectedAzienda?.ragione_sociale}</span>
           </div>
-          <span className="text-xs text-slate-400 font-semibold">{azienda.ragione_sociale}</span>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="p-8 flex-1">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <form onSubmit={handleSaveAnagrafica} className="space-y-6">
-            
-            {/* Box Intestazione */}
-            <div className="bg-white border border-slate-300 p-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs tracking-wider uppercase">
-                  <Building2 className="w-4 h-4" /> Modulo Master M01 — Struttura Societaria & Legal
-                </div>
-                {saveSuccess && (
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 border border-emerald-200">
-                    ✓ Modifiche Salvate con Successo
-                  </span>
-                )}
-              </div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-                {azienda.ragione_sociale}
-              </h1>
+        <div className="max-w-7xl mx-auto space-y-6">
+          
+          <div className="flex justify-between items-center bg-white border border-slate-300 p-6">
+            <div>
+              <h1 className="text-2xl font-extrabold">{selectedAzienda?.ragione_sociale}</h1>
+              <p className="text-xs text-slate-500 mt-1">Settore: {selectedAzienda?.settore || 'Generale'} • Paese: {selectedAzienda?.paese || 'Italia'}</p>
             </div>
+            <button
+              onClick={() => {
+                const baseUrl = window.location.origin;
+                navigator.clipboard.writeText(`${baseUrl}/cliente/${selectedAzienda?.id}`);
+                alert('Link questionario cliente copiato!');
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-xs font-bold flex items-center gap-2 cursor-pointer"
+            >
+              <Copy className="w-4 h-4" /> Copia Link Questionario Cliente
+            </button>
+          </div>
 
-            {/* Sezione 1: Dati Primari */}
-            <div className="bg-white border border-slate-300 p-6 space-y-4">
-              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-2 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-slate-500" /> 1. Dati Generali Azienda
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Ragione Sociale</label>
-                  <input
-                    type="text"
-                    value={azienda.ragione_sociale || ''}
-                    onChange={(e) => setAzienda({ ...azienda, ragione_sociale: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F5F5F5] border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-slate-950"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Settore / Industry</label>
-                  <input
-                    type="text"
-                    value={azienda.settore || ''}
-                    onChange={(e) => setAzienda({ ...azienda, settore: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F5F5F5] border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-slate-950"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Paese di Operatività</label>
-                  <input
-                    type="text"
-                    value={azienda.paese || ''}
-                    onChange={(e) => setAzienda({ ...azienda, paese: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F5F5F5] border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-slate-950"
-                  />
-                </div>
-              </div>
-            </div>
+          {/* NAVIGAZIONE TAB PRINCIPALI */}
+          <div className="flex border-b border-slate-300 gap-8 bg-white px-6 pt-4">
+            <button onClick={() => setActiveTab('executive')} className={`pb-3 text-xs font-bold uppercase border-b-2 cursor-pointer ${activeTab === 'executive' ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-400'}`}>1. Executive Dashboard</button>
+            <button onClick={() => setActiveTab('questionari')} className={`pb-3 text-xs font-bold uppercase border-b-2 cursor-pointer ${activeTab === 'questionari' ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-400'}`}>2. Questionari ({forms.length})</button>
+            <button onClick={() => setActiveTab('business_plan')} className={`pb-3 text-xs font-bold uppercase border-b-2 cursor-pointer ${activeTab === 'business_plan' ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-400'}`}>3. Business Plan Engine</button>
+            <button onClick={() => setActiveTab('cronoprogramma')} className={`pb-3 text-xs font-bold uppercase border-b-2 cursor-pointer ${activeTab === 'cronoprogramma' ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-400'}`}>4. Cronoprogramma</button>
+            <button onClick={() => setActiveTab('ruoli')} className={`pb-3 text-xs font-bold uppercase border-b-2 cursor-pointer ${activeTab === 'ruoli' ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-400'}`}>5. Organigramma</button>
+          </div>
 
-            {/* Sezione 2: Domande del Modulo M01 */}
-            <div className="bg-white border border-slate-300 p-6 space-y-4">
-              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-2 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-slate-500" /> 2. Parametri Societari (Modulo M01)
-              </h3>
+          {/* CONTENUTO TAB */}
+          <div className="pt-2">
+            {activeTab === 'executive' && <ExecutiveTab financialReports={financialReports} roadmapTasks={roadmapTasks} setActiveTab={setActiveTab} />}
+            {activeTab === 'questionari' && <QuestionariTab forms={forms} domande={domande} risposteClienti={risposteClienti} openFormsState={openFormsState} setOpenFormsState={setOpenFormsState} userRole={userRole} handleDeleteForm={() => {}} onGenerateReport={() => generateClientReport(selectedAzienda, forms, domande, risposteClienti, { email: 'admin' }, '00:00', financialReports, undefined, 'questionari', teamMembers)} />}
+            {activeTab === 'business_plan' && <BusinessPlanTab bpSubTab={bpSubTab} setBpSubTab={setBpSubTab} beginningBalance={beginningBalance} setBeginningBalance={setBeginningBalance} prodotti={prodotti} setProdotti={setProdotti} costiProduzioneExtra={costiProduzioneExtra} setCostiProduzioneExtra={setCostiProduzioneExtra} personale={personale} setPersonale={setPersonale} altriCosti={altriCosti} setAltriCosti={setAltriCosti} capex={capex} setCapex={setCapex} finanziamenti={finanziamenti} setFinanziamenti={setFinanziamenti} financialReports={financialReports} handleSaveFinancialsToSupabase={handleSaveFinancialsToSupabase} savingFinancials={savingFinancials} onGeneratePdfSection={(sec: string) => generateClientReport(selectedAzienda, forms, domande, risposteClienti, { email: 'admin' }, '00:00', financialReports, undefined, sec, teamMembers)} />}
+            {activeTab === 'cronoprogramma' && <CronoprogrammaTab roadmapTasks={roadmapTasks} projectTimelineSummary={{ minInizio: '2026-03-01', maxFine: '2026-03-31', totalGiorni: 30 }} userRole={userRole} setShowModalTask={() => {}} handleOpenEditTask={() => {}} handleDeleteRoadmapTask={() => {}} onGenerateReport={() => generateClientReport(selectedAzienda, forms, domande, risposteClienti, { email: 'admin' }, '00:00', financialReports, undefined, 'cronoprogramma', teamMembers)} />}
+            {activeTab === 'ruoli' && <RuoliGovernanceTab teamMembers={teamMembers} userRole={userRole} setShowModalTeam={() => {}} handleOpenEditTeamMember={() => {}} handleDeleteTeamMember={() => {}} onGenerateReport={() => generateClientReport(selectedAzienda, forms, domande, risposteClienti, { email: 'admin' }, '00:00', financialReports, undefined, 'ruoli', teamMembers)} />}
+          </div>
 
-              {domande.length === 0 ? (
-                <p className="text-xs text-slate-500 italic py-4">
-                  Nessun parametro specifico M01 attualmente collegato a questa azienda.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {domande.map((dom, idx) => (
-                    <div key={dom.id} className="text-xs bg-[#F5F5F5] p-4 border border-slate-300 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-extrabold text-slate-900 bg-slate-200 px-2 py-0.5">#{idx + 1}</span>
-                        <span className="text-slate-900 font-bold flex-1">{dom.testo_domanda}</span>
-                        <span className="text-[10px] text-slate-600 bg-slate-200 px-2 py-0.5 font-semibold">
-                          {dom.categoria || 'Anagrafica'}
-                        </span>
-                      </div>
-                      <div className="pt-2">
-                        <input
-                          type="text"
-                          placeholder="Inserisci dato societario..."
-                          value={risposte[dom.id] || ''}
-                          onChange={(e) => setRisposte({ ...risposte, [dom.id]: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-950"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Pulsante Salvataggio */}
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-slate-950 hover:bg-slate-900 text-[#ccff00] px-8 py-3.5 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {saving ? 'Salvataggio...' : 'Salva Scheda Anagrafica'} <Save className="w-4 h-4" />
-              </button>
-            </div>
-          </form>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-[#ccff00] text-slate-950 border-t border-[#b8e600] px-8 py-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center text-xs font-bold">
-          <span>GOS 1.0 — Scheda Anagrafica M01 (Vista Riservata Advisor)</span>
-          <span>Glaring LLP © 2026</span>
-        </div>
+      <footer className="bg-[#ccff00] text-slate-950 p-4 text-xs font-bold flex justify-between">
+        <span>GOS 1.0 Platform</span>
+        <span>Glaring LLP © 2026</span>
       </footer>
     </div>
   );
