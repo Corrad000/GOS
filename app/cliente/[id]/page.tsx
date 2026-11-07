@@ -52,7 +52,7 @@ export default function ClienteQuestionarioPage() {
         if (!dErr) domData = dData || [];
       }
 
-      // 4. Carica eventuali risposte preesistenti gia compilate
+      // 4. Carica eventuali risposte preesistenti già compilate
       const { data: respData } = await supabase
         .from('gos_risposte_clienti')
         .select('*')
@@ -85,12 +85,15 @@ export default function ClienteQuestionarioPage() {
     try {
       setSubmitting(true);
       
-      const payload = Object.keys(clientAnswers).map((domandaId) => ({
-        azienda_id: aziendaId,
-        domanda_id: domandaId,
-        valore_risposta: clientAnswers[domandaId],
-        updated_at: new Date().toISOString(),
-      }));
+      // Filtra ed invia solo le risposte effettivamente compilate dal cliente
+      const payload = Object.keys(clientAnswers)
+        .filter((domandaId) => clientAnswers[domandaId] && clientAnswers[domandaId].trim() !== '')
+        .map((domandaId) => ({
+          azienda_id: aziendaId,
+          domanda_id: domandaId,
+          valore_risposta: clientAnswers[domandaId].trim(),
+          updated_at: new Date().toISOString(),
+        }));
 
       if (payload.length > 0) {
         const { error } = await supabase
@@ -207,7 +210,6 @@ export default function ClienteQuestionarioPage() {
                                   <div className="pt-2">
                                     <input
                                       type="text"
-                                      required
                                       placeholder="Inserisci risposta / riscontro..."
                                       value={clientAnswers[dom.id] || ''}
                                       onChange={(e) => setClientAnswers({ ...clientAnswers, [dom.id]: e.target.value })}
